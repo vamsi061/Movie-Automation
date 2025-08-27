@@ -2,17 +2,21 @@ services:
   - type: web
     name: movie-site-search-api
     env: java
+    runtime: java17
     buildCommand: mvn clean package -DskipTests
-    startCommand: java -jar target/movie-site-search-api-1.0.0.jar
+    startCommand: java -Dserver.port=$PORT -Dspring.profiles.active=render -jar target/movie-site-search-api-1.0.0.jar
     plan: free
     region: oregon
     branch: main
+    rootDir: .
     healthCheckPath: /api/movie-sites/health
     envVars:
       - key: PORT
         value: 10000
       - key: SPRING_PROFILES_ACTIVE
-        value: production
+        value: render
+      - key: JAVA_OPTS
+        value: "-Xmx512m -Xms256m"
       - key: BROWSERLESS_API_KEY
         sync: false
       - key: BROWSERLESS_URL
@@ -27,4 +31,6 @@ services:
         sync: false
       - key: DISCORD_WEBHOOK_URL
         sync: false
+      - key: EMAIL_NOTIFICATIONS_ENABLED
+        value: false
     autoDeploy: true
