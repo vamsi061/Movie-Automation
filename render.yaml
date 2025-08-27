@@ -10,6 +10,15 @@ services:
     branch: main
     rootDir: .
     healthCheckPath: /api/movie-sites/health
+    buildFilter:
+      paths:
+        - src/**
+        - pom.xml
+        - render.yaml
+      ignoredPaths:
+        - frontend/**
+        - node_modules/**
+        - "*.md"
     envVars:
       - key: PORT
         value: 10000

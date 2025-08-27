@@ -1,0 +1,14 @@
+# Ignore frontend files for backend deployment
+frontend/
+node_modules/
+*.md
+.git/
+.gitignore
+*.log
+*.tmp
+
+# Keep only Java backend files
+!src/
+!pom.xml
+!render.yaml
+!application*.yml
