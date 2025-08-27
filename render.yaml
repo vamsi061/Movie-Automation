@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: movie-site-search-api
+    env: java
+    buildCommand: mvn clean package -DskipTests
+    startCommand: java -jar target/movie-site-search-api-1.0.0.jar
+    plan: free
+    region: oregon
+    branch: main
+    healthCheckPath: /api/movie-sites/health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: SPRING_PROFILES_ACTIVE
+        value: production
+      - key: BROWSERLESS_API_KEY
+        sync: false
+      - key: BROWSERLESS_URL
+        value: https://chrome.browserless.io
+      - key: N8N_WEBHOOK_URL
+        value: https://n8n-7j94.onrender.com
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+    autoDeploy: true
