@@ -1,0 +1,531 @@
+{
+  "name": "Movie Site Monitoring Workflows",
+  "description": "Complete n8n workflows for movie site monitoring and alerting",
+  "workflows": [
+    {
+      "name": "Daily Site Health Check",
+      "description": "Automated daily health check for all movie sites",
+      "nodes": [
+        {
+          "name": "Daily Schedule",
+          "type": "n8n-nodes-base.cron",
+          "parameters": {
+            "rule": {
+              "hour": 9,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          "position": [250, 300]
+        },
+        {
+          "name": "Trigger Health Check",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://movie-site-search-api.fly.dev/api/admin/monitoring/health-check",
+            "method": "POST",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [450, 300]
+        },
+        {
+          "name": "Wait for Completion",
+          "type": "n8n-nodes-base.wait",
+          "parameters": {
+            "amount": 5,
+            "unit": "minutes"
+          },
+          "position": [650, 300]
+        },
+        {
+          "name": "Get Health Status",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://movie-site-search-api.fly.dev/api/admin/monitoring/stats",
+            "method": "GET"
+          },
+          "position": [850, 300]
+        },
+        {
+          "name": "Process Results",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "const healthData = items[0].json.healthStatus;\nconst stats = items[0].json.statistics;\n\nconst report = {\n  timestamp: new Date().toISOString(),\n  totalSites: healthData.totalSites,\n  workingSites: healthData.workingSites,\n  downSites: healthData.downSites,\n  uptimePercentage: healthData.uptimePercentage,\n  averageResponseTime: healthData.averageResponseTime,\n  status: healthData.status\n};\n\nreturn [{ json: report }];"
+          },
+          "position": [1050, 300]
+        },
+        {
+          "name": "Send Telegram Report",
+          "type": "n8n-nodes-base.telegram",
+          "parameters": {
+            "chatId": "${TELEGRAM_CHAT_ID}",
+            "text": "📊 *Daily Movie Sites Report*\\n\\n🎬 Total Sites: {{ $json.totalSites }}\\n✅ Working: {{ $json.workingSites }}\\n❌ Down: {{ $json.downSites }}\\n📈 Uptime: {{ $json.uptimePercentage }}%\\n⚡ Avg Response: {{ $json.averageResponseTime }}ms\\n\\n_Status: {{ $json.status }}_",
+            "parseMode": "Markdown"
+          },
+          "position": [1250, 200]
+        },
+        {
+          "name": "Send Slack Report",
+          "type": "n8n-nodes-base.slack",
+          "parameters": {
+            "channel": "#movie-sites",
+            "text": "Daily Movie Sites Health Report",
+            "attachments": [
+              {
+                "color": "{{ $json.status === 'HEALTHY' ? 'good' : ($json.status === 'DEGRADED' ? 'warning' : 'danger') }}",
+                "title": "System Status: {{ $json.status }}",
+                "fields": [
+                  {
+                    "title": "Working Sites",
+                    "value": "{{ $json.workingSites }}/{{ $json.totalSites }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Uptime",
+                    "value": "{{ $json.uptimePercentage }}%",
+                    "short": true
+                  },
+                  {
+                    "title": "Avg Response Time",
+                    "value": "{{ $json.averageResponseTime }}ms",
+                    "short": true
+                  }
+                ]
+              }
+            ]
+          },
+          "position": [1250, 400]
+        }
+      ],
+      "connections": {
+        "Daily Schedule": {
+          "main": [
+            [
+              {
+                "node": "Trigger Health Check",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Trigger Health Check": {
+          "main": [
+            [
+              {
+                "node": "Wait for Completion",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Wait for Completion": {
+          "main": [
+            [
+              {
+                "node": "Get Health Status",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Get Health Status": {
+          "main": [
+            [
+              {
+                "node": "Process Results",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Process Results": {
+          "main": [
+            [
+              {
+                "node": "Send Telegram Report",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "Send Slack Report",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Site Down Alert Workflow",
+      "description": "Immediate alerts when sites go down",
+      "nodes": [
+        {
+          "name": "Monitoring Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "parameters": {
+            "path": "monitoring",
+            "httpMethod": "POST"
+          },
+          "position": [250, 300]
+        },
+        {
+          "name": "Check Alert Type",
+          "type": "n8n-nodes-base.if",
+          "parameters": {
+            "conditions": {
+              "string": [
+                {
+                  "value1": "={{ $json.report.downSites.length }}",
+                  "operation": "larger",
+                  "value2": "0"
+                }
+              ]
+            }
+          },
+          "position": [450, 300]
+        },
+        {
+          "name": "Format Alert Message",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "const report = items[0].json.report;\nconst downSites = report.downSites || [];\nconst newWorkingSites = report.newWorkingSites || [];\n\nlet message = '';\n\nif (downSites.length > 0) {\n  message += `🚨 *ALERT: Sites Down*\\n\\n`;\n  message += `❌ Down Sites (${downSites.length}): ${downSites.join(', ')}\\n\\n`;\n}\n\nif (newWorkingSites.length > 0) {\n  message += `✅ *Good News: Sites Recovered*\\n\\n`;\n  message += `🎉 Working Sites (${newWorkingSites.length}): ${newWorkingSites.join(', ')}\\n\\n`;\n}\n\nmessage += `📊 *Current Status*\\n`;\nmessage += `🎬 Total: ${report.totalSites}\\n`;\nmessage += `✅ Working: ${report.workingSitesCount}\\n`;\nmessage += `❌ Down: ${report.downSitesCount}\\n`;\nmessage += `📈 Uptime: ${report.uptimePercentage.toFixed(1)}%\\n\\n`;\nmessage += `_Time: ${new Date().toLocaleString()}_`;\n\nreturn [{ json: { message, severity: downSites.length > 0 ? 'CRITICAL' : 'INFO' } }];"
+          },
+          "position": [650, 200]
+        },
+        {
+          "name": "Send Critical Alert",
+          "type": "n8n-nodes-base.telegram",
+          "parameters": {
+            "chatId": "${TELEGRAM_CHAT_ID}",
+            "text": "{{ $json.message }}",
+            "parseMode": "Markdown"
+          },
+          "position": [850, 200]
+        },
+        {
+          "name": "Send Slack Alert",
+          "type": "n8n-nodes-base.slack",
+          "parameters": {
+            "channel": "#alerts",
+            "text": "{{ $json.message }}",
+            "username": "Movie Site Monitor"
+          },
+          "position": [850, 300]
+        },
+        {
+          "name": "Log to Database",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://movie-site-search-api.fly.dev/api/admin/logs",
+            "method": "POST",
+            "body": {
+              "action": "Alert Sent",
+              "severity": "{{ $json.severity }}",
+              "message": "{{ $json.message }}",
+              "timestamp": "{{ new Date().toISOString() }}"
+            }
+          },
+          "position": [1050, 250]
+        }
+      ],
+      "connections": {
+        "Monitoring Webhook": {
+          "main": [
+            [
+              {
+                "node": "Check Alert Type",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check Alert Type": {
+          "main": [
+            [
+              {
+                "node": "Format Alert Message",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Format Alert Message": {
+          "main": [
+            [
+              {
+                "node": "Send Critical Alert",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "Send Slack Alert",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Send Critical Alert": {
+          "main": [
+            [
+              {
+                "node": "Log to Database",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Weekly Summary Report",
+      "description": "Comprehensive weekly report with trends",
+      "nodes": [
+        {
+          "name": "Weekly Schedule",
+          "type": "n8n-nodes-base.cron",
+          "parameters": {
+            "rule": {
+              "dayOfWeek": 1,
+              "hour": 10,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          "position": [250, 300]
+        },
+        {
+          "name": "Get All Sites Data",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://movie-site-search-api.fly.dev/api/admin/sites?size=100",
+            "method": "GET"
+          },
+          "position": [450, 300]
+        },
+        {
+          "name": "Get Monitoring Stats",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://movie-site-search-api.fly.dev/api/admin/monitoring/stats",
+            "method": "GET"
+          },
+          "position": [650, 300]
+        },
+        {
+          "name": "Generate Weekly Report",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "const sitesData = items[0].json.sites;\nconst statsData = items[1].json;\n\nconst workingSites = sitesData.filter(site => site.status === 'WORKING');\nconst downSites = sitesData.filter(site => site.status !== 'WORKING');\n\n// Calculate trends (simplified)\nconst avgResponseTime = workingSites.reduce((sum, site) => sum + (site.responseTime || 0), 0) / workingSites.length;\n\nconst report = {\n  period: 'Weekly Report',\n  totalSites: sitesData.length,\n  workingSites: workingSites.length,\n  downSites: downSites.length,\n  uptimePercentage: (workingSites.length / sitesData.length * 100).toFixed(1),\n  averageResponseTime: avgResponseTime.toFixed(0),\n  topWorkingSites: workingSites.slice(0, 5).map(site => site.siteName),\n  problemSites: downSites.map(site => site.siteName),\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: report }];"
+          },
+          "position": [850, 300]
+        },
+        {
+          "name": "Send Weekly Email",
+          "type": "n8n-nodes-base.emailSend",
+          "parameters": {
+            "fromEmail": "noreply@movielinks.com",
+            "toEmail": "${ADMIN_EMAIL}",
+            "subject": "Weekly Movie Sites Report - {{ $json.period }}",
+            "text": "Weekly Movie Sites Summary\\n\\nTotal Sites: {{ $json.totalSites }}\\nWorking: {{ $json.workingSites }}\\nDown: {{ $json.downSites }}\\nUptime: {{ $json.uptimePercentage }}%\\nAvg Response Time: {{ $json.averageResponseTime }}ms\\n\\nTop Working Sites:\\n{{ $json.topWorkingSites.join('\\n') }}\\n\\nProblem Sites:\\n{{ $json.problemSites.join('\\n') }}"
+          },
+          "position": [1050, 200]
+        },
+        {
+          "name": "Send Detailed Telegram",
+          "type": "n8n-nodes-base.telegram",
+          "parameters": {
+            "chatId": "${TELEGRAM_CHAT_ID}",
+            "text": "📊 *Weekly Movie Sites Report*\\n\\n📈 *Overview*\\n🎬 Total Sites: {{ $json.totalSites }}\\n✅ Working: {{ $json.workingSites }}\\n❌ Down: {{ $json.downSites }}\\n📊 Uptime: {{ $json.uptimePercentage }}%\\n⚡ Avg Response: {{ $json.averageResponseTime }}ms\\n\\n🏆 *Top Working Sites*\\n{{ $json.topWorkingSites.join('\\n') }}\\n\\n⚠️ *Problem Sites*\\n{{ $json.problemSites.join('\\n') }}\\n\\n_Generated: {{ new Date().toLocaleString() }}_",
+            "parseMode": "Markdown"
+          },
+          "position": [1050, 400]
+        }
+      ],
+      "connections": {
+        "Weekly Schedule": {
+          "main": [
+            [
+              {
+                "node": "Get All Sites Data",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Get All Sites Data": {
+          "main": [
+            [
+              {
+                "node": "Get Monitoring Stats",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Get Monitoring Stats": {
+          "main": [
+            [
+              {
+                "node": "Generate Weekly Report",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Generate Weekly Report": {
+          "main": [
+            [
+              {
+                "node": "Send Weekly Email",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "Send Detailed Telegram",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Auto Site Discovery",
+      "description": "Automatically discover and add new movie sites",
+      "nodes": [
+        {
+          "name": "Discovery Schedule",
+          "type": "n8n-nodes-base.cron",
+          "parameters": {
+            "rule": {
+              "dayOfWeek": 0,
+              "hour": 2,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          "position": [250, 300]
+        },
+        {
+          "name": "Search for New Sites",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://movie-site-search-api.fly.dev/api/movie-sites/search/batch",
+            "method": "POST",
+            "body": {
+              "siteNames": ["isaimini", "tamilyogi", "moviesda", "cinemavilla", "skymovieshd"]
+            }
+          },
+          "position": [450, 300]
+        },
+        {
+          "name": "Filter Working Sites",
+          "type": "n8n-nodes-base.function",
+          "parameters": {
+            "functionCode": "const results = items[0].json.results || [];\nconst workingSites = results.filter(site => site.status === 'WORKING');\n\nreturn workingSites.map(site => ({ json: site }));"
+          },
+          "position": [650, 300]
+        },
+        {
+          "name": "Add to Database",
+          "type": "n8n-nodes-base.httpRequest",
+          "parameters": {
+            "url": "https://movie-site-search-api.fly.dev/api/admin/sites",
+            "method": "POST",
+            "body": {
+              "siteName": "={{ $json.siteName }}",
+              "currentWorkingUrl": "={{ $json.currentWorkingUrl }}",
+              "status": "={{ $json.status }}"
+            }
+          },
+          "position": [850, 300]
+        },
+        {
+          "name": "Notify New Discovery",
+          "type": "n8n-nodes-base.telegram",
+          "parameters": {
+            "chatId": "${TELEGRAM_CHAT_ID}",
+            "text": "🎉 *New Site Discovered!*\\n\\n🎬 Site: {{ $json.siteName }}\\n🔗 URL: {{ $json.currentWorkingUrl }}\\n✅ Status: {{ $json.status }}\\n\\n_Auto-discovered and added to monitoring_",
+            "parseMode": "Markdown"
+          },
+          "position": [1050, 300]
+        }
+      ],
+      "connections": {
+        "Discovery Schedule": {
+          "main": [
+            [
+              {
+                "node": "Search for New Sites",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Search for New Sites": {
+          "main": [
+            [
+              {
+                "node": "Filter Working Sites",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Filter Working Sites": {
+          "main": [
+            [
+              {
+                "node": "Add to Database",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Add to Database": {
+          "main": [
+            [
+              {
+                "node": "Notify New Discovery",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ],
+  "environment_variables": {
+    "TELEGRAM_BOT_TOKEN": "Your Telegram bot token",
+    "TELEGRAM_CHAT_ID": "Your Telegram chat ID",
+    "SLACK_WEBHOOK_URL": "Your Slack webhook URL",
+    "ADMIN_EMAIL": "admin@yourcompany.com"
+  },
+  "setup_instructions": [
+    "1. Import these workflows into your n8n instance at https://n8n-7j94.onrender.com",
+    "2. Set up the required environment variables in n8n settings",
+    "3. Configure Telegram bot (create bot with @BotFather)",
+    "4. Set up Slack webhook (create app in Slack workspace)",
+    "5. Test each workflow individually before enabling schedules",
+    "6. Monitor the execution logs for any errors"
+  ]
+}

@@ -1,0 +1,115 @@
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: movie-site-search-api
+  
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:moviedb}
+    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: ${DATABASE_DIALECT:org.hibernate.dialect.H2Dialect}
+        format_sql: false
+  
+  h2:
+    console:
+      enabled: false
+
+# Browserless Configuration
+browserless:
+  api:
+    key: ${BROWSERLESS_API_KEY}
+    url: ${BROWSERLESS_URL:https://chrome.browserless.io}
+    timeout: 60000
+
+# Movie Site Search Configuration
+movie-search:
+  max-results-per-search: 10
+  search-delay-ms: 2000
+  url-validation-timeout: 5000
+  supported-sites:
+    - movierulz
+    - moviezap
+    - tamilrockers
+    - filmywap
+    - worldfree4u
+    - 9xmovies
+    - khatrimaza
+    - bolly4u
+
+# n8n Integration
+n8n:
+  webhook:
+    url: ${N8N_WEBHOOK_URL:https://n8n-7j94.onrender.com}
+    api-key: ${N8N_API_KEY:}
+
+# Monitoring Configuration
+monitoring:
+  check-interval-hours: 6
+  check-interval-ms: 21600000  # 6 hours in milliseconds
+  stale-check-ms: 3600000      # 1 hour in milliseconds
+  alert-threshold-minutes: 30
+
+# Notification Configuration
+notifications:
+  telegram:
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:}
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL:}
+  discord:
+    webhook-url: ${DISCORD_WEBHOOK_URL:}
+  email:
+    enabled: ${EMAIL_NOTIFICATIONS_ENABLED:false}
+
+# CORS Configuration for Vercel frontend
+cors:
+  allowed-origins: 
+    - https://*.vercel.app
+    - https://your-frontend-domain.vercel.app
+    - http://localhost:3000
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true
+
+# Logging Configuration
+logging:
+  level:
+    com.movielinks: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+  file:
+    name: /tmp/movie-search-api.log
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+  server:
+    port: ${PORT:8080}
+
+# API Documentation
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html

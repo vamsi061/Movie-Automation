@@ -1,0 +1,79 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: movie-site-search-api
+  
+  datasource:
+    url: jdbc:h2:mem:moviedb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# Browserless Configuration
+browserless:
+  api:
+    key: ${BROWSERLESS_API_KEY:your_api_key_here}
+    url: ${BROWSERLESS_URL:https://chrome.browserless.io}
+    timeout: 60000
+
+# Movie Site Search Configuration
+movie-search:
+  max-results-per-search: 10
+  search-delay-ms: 2000
+  url-validation-timeout: 5000
+  supported-sites:
+    - movierulz
+    - moviezap
+    - tamilrockers
+    - filmywap
+    - worldfree4u
+    - 9xmovies
+    - khatrimaza
+    - bolly4u
+
+# Logging Configuration
+logging:
+  level:
+    com.movielinks: INFO
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/movie-search-api.log
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# API Documentation
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
